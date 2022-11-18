@@ -1,4 +1,4 @@
-from pyrogram import Client
+from pyrogram import Client, filters
 import asyncio
 import json
 import os
@@ -20,9 +20,19 @@ else:
     data["api_hash"] = None
     data["api_id"] = None
     data["target_chat_id"] = None
+    data["run_as_admin"] = False
 
     with open('config.json', 'w') as json_file:
         json_file.write(json.dumps(data, sort_keys=True, indent=4, ensure_ascii=False))    
+
+if "goyim_data.json" not in os.listdir():
+
+    with open("goyim_data.json", 'x') as json_file:
+        json_file.write('{}')
+
+else:
+    with open("goyim_data.json", 'w') as json_file:
+        json_file.write('{}')
 
 
 if "text.txt" not in os.listdir():
@@ -55,17 +65,17 @@ print(f"""
       3MMMMx.     'MMMMMMf      xnMMMMMM"               
       '*MMMMM      MMMMMM.     nMMMAMMP"                -c        Change api id and hash (e.g. -c 12345354 hash)
         *MMMMMx    "MMMMM\    .MMMMMMM=                 {'-' * 3}
-         *MMMMMh   "MMMMM"   JMMOMMMP                   -g        Set the group id (e.g. -g -643222694)
+         *MMMMMh   "MMMMM"   JMMOMMMP                   -g        Set the chat id (e.g. -g -643222694)
            MMMMMM   3MMMM.  dMMMMMM            .        {'-' * 3}
             MMMMMM  "MMMM  .MMMMM(        .nnMP"        -i        Get the config info
 =..          *MMMMx  MSM"  dMMMM"    .nnMMMMM*          {'-' * 3}
-  "MMn...     'MMMMr 'MM   MMM"   .nMMMMMMM*"           -r        Save changes and run programm
+  "MMn...     'MMMMr 'MM   MMM"   .nMMMMMMM*"           -r        Save changes and run programm (-r a for admin)
    "4MMMMnn..   *MMM  MM  MMP"  .dMMMMMMM""             {'-' * 3}
      ^MMMMMMMMx.  *ML "M .M*  .MMMMMM**"                -e        Close programm
         *PMMMMMMhn. *x > M  .MMMM**""                   {'-' * 3}
            ""**MMMMhx/.h/ .=*"                          
                     .3P"%....                           
-                  nP"     "*MMnx       @KillTheRussians
+                  nP"     "*MMnx   By: seniornamedw@proton.me
 
 """)
 
@@ -105,7 +115,6 @@ def handle_the_configurator():
 
                 print("Target chat id:" + str(data["target_chat_id"]))
             except Exception as e:
-                print(e)
                 print("Wrong data, cant split!")
 
 
@@ -113,9 +122,28 @@ def handle_the_configurator():
 
             print(f'\n[api_id]: {data["api_id"]}\n[api_hash]: {data["api_hash"]}\n[target_chat]: {data["target_chat_id"]}\n')
         
-        
+
         elif initial_input.startswith('-r'):
-            print("Saving changes...")
+            with open("config.json", 'r') as json_file:
+                data = json.loads(json_file.read())
+
+            if data["api_id"] == None or data["api_hash"] == None or data["target_chat_id"] == None:
+
+                print("Api id, api hash and chat_id are required!") 
+                continue
+
+            print("Changes saved!")
+
+            if initial_input == '-r a':
+                data["run_as_admin"] = True
+                print("Admin mode activated")
+            else:
+                data["run_as_admin"] = False
+                
+
+            with open('config.json', 'w') as json_file:
+                json_file.write(json.dumps(data, sort_keys=True, indent=4, ensure_ascii=False))
+
             break
         
         elif initial_input.startswith('-e'):
@@ -123,9 +151,42 @@ def handle_the_configurator():
 
         else: print("Unknown command!")
         
+def parse_chat_if_member(chat_id):
+
+    app = Client("my_account", data['api_id'], data['api_hash'])
+
+    @app.on_message(filters.group)
+    async def hello(client, message):
+
+        with open('goyim_data.json', 'r', encoding='utf-8') as json_file:
+            data = json.loads(json_file.read())
+
+        if (message.chat.id == chat_id) and (message.from_user.username != None):
+
+            if str(message.from_user.id) not in data:
+                data[str(message.from_user.id)] = {
+                    "goy_messages_count": 1,
+                    "goy_nickname": f'@{message.from_user.username}'
+                }
+
+            else:
+                data[str(message.from_user.id)]["goy_messages_count"] += 1
+
+                if f'@{message.from_user.username}' != data[str(message.from_user.id)]["goy_nickname"]:
+                    data[str(message.from_user.id)]["goy_nickname"] = f'@{message.from_user.username}'
 
 
-async def parse_chat(chat_id):
+            with open('goyim_data.json', 'w') as json_file:
+                json_file.write(json.dumps(data, sort_keys=False, indent=4, ensure_ascii=False))
+
+    try:
+        app.run()
+    except:
+        app.stop()
+        print(f'\nStopped!{Exception}')
+
+
+async def parse_chat_if_admin(chat_id):
 
     NUMBER_OF_MESSAGES = 0
     MEMBERS_PARSED = 0
@@ -141,6 +202,7 @@ async def parse_chat(chat_id):
 
             if NUMBER_OF_MESSAGES > 0 and member.user.username:
                 MEMBERS_PARSED += 1
+
                 with open('text.txt', 'a', encoding='utf-8') as text_file:
                     text_file.write(f'[NICKNAME]: @{member.user.username}\n[MESSAGES SENT]: {NUMBER_OF_MESSAGES}\n\n')
 
@@ -148,10 +210,29 @@ async def parse_chat(chat_id):
         
         print(f'Members parsed: {MEMBERS_PARSED}, data saved to text.txt')
             
+def json_to_txt():
+
+    MEMBERS_PARSED = 0
+
+    with open('goyim_data.json', 'r') as json_file:
+        data = json.loads(json_file.read())         
+    
+    for i in data:
+
+        MEMBERS_PARSED += 1
+
+        with open('text.txt', 'a') as text_file:
+            text_file.write(f'[MEMBER]: {data[i]["goy_nickname"]}\n[MESSAGE_SENT]: {data[i]["goy_messages_count"]}\n\n\n')
+    
+    print(f'{MEMBERS_PARSED} members parsed. Result in text.txt')
+
         
-def main():
-    handle_the_configurator()
-    asyncio.run(parse_chat(data["target_chat_id"]))
 
 if __name__ == "__main__":
-    main()
+    handle_the_configurator()
+
+    if data["run_as_admin"] == True:
+        asyncio.run(parse_chat_if_admin(data["target_chat_id"]))
+    elif data["run_as_admin"] == False:
+        parse_chat_if_member(data["target_chat_id"])
+        json_to_txt()
